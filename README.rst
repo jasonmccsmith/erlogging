@@ -1,10 +1,16 @@
-# errutils
+errutils
+========
 
-## erlogging
+Elemental Reasoning reporting utilities
 
-Copy the following code to the beginning of each file:
+Just some simple utilities that aid in logging and reporting errors
 
-	import erlogging
+erlogging
+---------
+
+Copy the following code to the beginning of each file::
+
+	from errutils import erlogging
 	logger = erlogging.setup(lambda depth: sys._getframe(depth))
 
 That's it.  Use the logger as normal from logging module.  It has two handlers:
@@ -14,17 +20,19 @@ Both use the same format, and are set to `DEBUG` by default.  `logger.setLevel` 
 
 Use `erlogging.<LOG_LEVEL>` instead of `logging.<LOG_LEVEL>` if you like, they're provided for convenience.
 
-## emailer
-A simple email wrapper useful with erlogging.
+emailer
+-------
 
-	from emailer import Emailer
-	emailer = Emailer("myEmail.config")
-	emailer.sendEmail("toaddr@company.com", "fromaddr@company.com", "Subject line", "Message body\ncontinued.")
-	emailer.sendEmail("Message body using defaults\n")
+A simple email wrapper useful with erlogging::
+
+	from errutils import emailer
+	mailer = emailer.Emailer("myEmail.config")
+	mailer.sendEmail("toaddr@company.com", "fromaddr@company.com", "Subject line", "Message body\ncontinued.")
+	mailer.sendEmail("Message body using defaults\n")
 
 Note that all mail will be sent using the account data in myEmail.config.
 
-Example myEmail.config:
+Example myEmail.config::
 
 	[DEFAULT]
 	mailhost=smtp.gmail.com 587
