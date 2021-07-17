@@ -25,6 +25,7 @@ A simple email wrapper useful with erlogging.
 Note that all mail will be sent using the account data in myEmail.config.
 
 Example myEmail.config:
+
 	[DEFAULT]
 	mailhost=smtp.gmail.com 587
 	fromaddr=tool@company.com
