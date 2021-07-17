@@ -1,0 +1,2 @@
+include errutils/myEmail.config
+include README.md
