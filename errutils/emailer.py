@@ -8,7 +8,7 @@ All rights reserved unless otherwise specified in licensing agreement.
 import sys
 import os
 
-import erlogging
+from . import erlogging
 erlogging.preSetupEmailFromConfig("omgEmailSetup.config")
 logger = erlogging.setup(lambda depth: sys._getframe(depth))
 
