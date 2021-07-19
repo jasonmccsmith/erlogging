@@ -171,7 +171,10 @@ def setup(nameGetter):
         formatter = logging.Formatter(fmt)
 
         # File handler - DEBUG
-        fh = logging.handlers.RotatingFileHandler(loggername + ".log", maxBytes=10485760, backupCount=5)
+        logdir = os.getcwd()
+        if "ER_LOG_DIR" in os.environ:
+            logdir = os.path.abspath(os.path.expanduser(os.environ["ER_LOG_DIR"]))
+        fh = logging.handlers.RotatingFileHandler(os.path.join(logdir, loggername + ".log"), maxBytes=10485760, backupCount=5)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
