@@ -9,7 +9,6 @@ import sys
 import os
 
 from . import erlogging
-erlogging.preSetupEmailFromConfig("omgEmailSetup.config")
 logger = erlogging.setup(lambda depth: sys._getframe(depth))
 
 import configparser
@@ -18,7 +17,7 @@ import ssl
 class Emailer(object):
     def __init__(self, emailConfigFile = None, persistent_connection = False):
         if "ER_EMAIL_CONFIG" in os.environ:
-            configFile = os.environ["ER_EMAIL_CONFIG"])
+            configFile = os.environ["ER_EMAIL_CONFIG"]
         if emailConfigFile:
             configFile = emailConfigFile
         if os.path.exists(configFile):
