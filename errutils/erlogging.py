@@ -2,18 +2,6 @@
 Copyright Elemental Reasoning, LLC, 2019
 All rights reserved unless otherwise specified in licensing agreement.
 ---------------
-
-Copy the following code to the beginning of each file:
-
-import erlogging
-logger = erlogging.setup(lambda depth: sys._getframe(depth))
-
-That's it.  Use the logger as normal from logging module.  It has two handlers:
-1) Colored stderr output - if you are on a terminal that is not color capable, it falls back to monochrome
-2) A rotating file handler
-Both use the same format, and are set to DEBUG by default.  logger.setLevel will let you control both at one shot.
-
-Use erlogging.<LOG_LEVEL> instead of logging.<LOG_LEVEL> if you like, they're provided for convenience.
 """
 
 import os
@@ -124,8 +112,12 @@ def preSetupEmailFromConfig(configfile):
 #       emailFromAddr = 
 #
 
-def setup(nameGetter):
-    """Set up a logger for a module that calls this function.  This is a bit different.  We need the call to sys._getframe to happen in the file that we want info for, but we can do that by having the file send us a lambda of the call.  We do all the heavy lifting here, walking through the call stack to extract an import chain that we use as the loggername, using depth of (useful) stack to set up handlers only when needed, etc."""
+def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=None):
+    """Set up a logger for a module that calls this function.  This is a bit different.  
+    We need the call to sys._getframe to happen in the file that we want info for, but 
+    we can do that by having the file send us a lambda of the call.  We do all the heavy 
+    lifting here, walking through the call stack to extract an import chain that we use 
+    as the loggername, using depth of (useful) stack to set up handlers only when needed, etc."""
     
     global emailSetupInfo
     
@@ -174,12 +166,18 @@ def setup(nameGetter):
         logdir = os.getcwd()
         if "ER_LOG_DIR" in os.environ:
             logdir = os.path.abspath(os.path.expanduser(os.environ["ER_LOG_DIR"]))
+        if explicitLogDir:
+            logdir = explicitLogDir
         fh = logging.handlers.RotatingFileHandler(os.path.join(logdir, loggername + ".log"), maxBytes=10485760, backupCount=5)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
         
         # Email handler - ERROR and CRITICAL only (includes .exception() calls)
+        if "ER_EMAIL_CONFIG" in os.environ:
+            preSetupEmailFromConfig(os.environ["ER_EMAIL_CONFIG"])
+        if emailConfigFile:
+            preSetupEmailFromConfig(emailConfigFile)
         if len(emailSetupInfo) > 0:
             try:
                 emailHandler = logging.handlers.SMTPHandler(**(emailSetupInfo))
@@ -190,7 +188,11 @@ def setup(nameGetter):
                 print(e)
     
         # Colored syntax stderr handler - DEBUG
-        styles={'asctime': {'color': 'green'}, 'module': {'color': 'magenta'}, 'levelname': {'color': 'white', 'bold': True}, 'funcName': {'color': 'cyan'}, 'programname': {'color': 'blue'}}
+        styles={
+            'asctime': {'color': 'green'}, 'module': {'color': 'magenta'}, 
+            'levelname': {'color': 'white', 'bold': True}, 
+            'funcName': {'color': 'cyan'}, 'programname': {'color': 'blue'}
+        }
         coloredlogs.install(level='DEBUG', fmt=fmt, field_styles=styles, logger=logger)
     
         # Default level for logger

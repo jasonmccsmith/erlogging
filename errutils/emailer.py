@@ -16,7 +16,11 @@ import configparser
 import smtplib
 import ssl
 class Emailer(object):
-    def __init__(self, configFile, persistent_connection = False):
+    def __init__(self, emailConfigFile = None, persistent_connection = False):
+        if "ER_EMAIL_CONFIG" in os.environ:
+            configFile = os.environ["ER_EMAIL_CONFIG"])
+        if emailConfigFile:
+            configFile = emailConfigFile
         if os.path.exists(configFile):
             config = configparser.ConfigParser()
             config.read(configFile)
