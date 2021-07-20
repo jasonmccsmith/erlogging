@@ -16,23 +16,31 @@ import smtplib
 import ssl
 class Emailer(object):
     def __init__(self, emailConfigFile = None, persistent_connection = False):
+        configFile = None
         if "ER_EMAIL_CONFIG" in os.environ:
             configFile = os.environ["ER_EMAIL_CONFIG"]
         if emailConfigFile:
             configFile = emailConfigFile
-        if os.path.exists(configFile):
-            config = configparser.ConfigParser()
-            config.read(configFile)
-            self.host, self.port = config.get('DEFAULT', 'mailhost').split()
-            self.sender_email = config.get('DEFAULT', 'fromaddr')
-            self.username, self.password = config.get('DEFAULT', 'credentials').split()
-            self.server = None
-            if persistent_connection:
-                self.server = smtplib.SMTP_SSL(self.host, self.port, context=ssl.create_default_context())
-                self.login(self.username, self.password)
+        if configFile:
+            if os.path.exists(configFile):
+                config = configparser.ConfigParser()
+                config.read(configFile)
+                self.host, self.port = config.get('DEFAULT', 'mailhost').split()
+                self.sender_email = config.get('DEFAULT', 'fromaddr')
+                self.username, self.password = config.get('DEFAULT', 'credentials').split()
+                self.server = None
+                if persistent_connection:
+                    self.server = smtplib.SMTP_SSL(self.host, self.port, context=ssl.create_default_context())
+                    self.login(self.username, self.password)
+            else:
+                # Log as error since configFile *WAS* set, but nothing was found
+                logger.error("No config file at: {}".format(configFile))
+                logger.error("Will not email errors or alerts")
+                self.host = None
         else:
-            logger.error("No config file at: {}".format(configFile))
-            logger.error("Will not email errors or alerts")
+            # Do not log as error because no configFile was ever set
+            # Possible they did not intend to set one up
+            logger.warning("errutils.emailer.Emailer was initialized with no valid email configuration. No mail will be sent.")
             self.host = None
     
     def sendEmail(self, to, subject, message):
