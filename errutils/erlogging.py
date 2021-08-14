@@ -131,16 +131,20 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
     else:
         steps3 = [0, 0, 0, 9, 7, 6, 6, 6, 6, 6, 6]
         __depthStep = steps3[version.minor]
+        # print (version.minor, steps3, steps3[version.minor])
 
     # Offset is to roll back from this call site to the function/lambda defined in the module of interest
     __depthOffset = 2
 
+    # print("First level logger is at __depthStep + __depthOffset = {}".format(__depthStep + __depthOffset))
+    
     depth = __depthOffset
     loggername = ""
     while True:
         try:
             srcFile = nameGetter(depth).f_globals.get('__file__')
             if srcFile == None:
+                # print("ERROR: NO SOURCE FILE??")
                 break
             importScope = os.path.splitext(os.path.basename(srcFile))[0]
             if depth == __depthOffset:
@@ -148,16 +152,21 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
             else:
                 loggername = importScope + "." + loggername
             depth += __depthStep
+            # print ("{}: '{}' at depth {} using offset {} and step {}".format(srcFile, loggername, depth, __depthOffset, __depthStep))
         except ValueError:
             break
-    # print (depth, loggername)
+    # print ("{}: '{}' at depth {}".format(srcFile, loggername, depth))
     
     # Get the bloody logger
     logger = logging.getLogger(loggername)
+    # print("'{}'".format(loggername[:10]))
     
     # If this is a top level module, set the formatters and handlers for it.
     # Children of this logger will inherit these behaviors
-    if depth == __depthStep + __depthOffset:
+    if   depth == __depthStep + __depthOffset or \
+        (depth == __depthStep * 2 + __depthOffset and loggername[:8] == '__init__'):
+        # Second clause is for when the top level is wrapped in a setuptools entry point
+        # print ("----------- Setting up logger!")
         # Formatting and output styles
         fmt='%(asctime)s - %(module)s %(funcName)s [%(lineno)4d] - %(levelname)s - %(message)s'
         formatter = logging.Formatter(fmt)
@@ -165,10 +174,14 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
         # File handler - DEBUG
         logdir = os.getcwd()
         if "ER_LOG_DIR" in os.environ:
-            logdir = os.path.abspath(os.path.expanduser(os.environ["ER_LOG_DIR"]))
+            envlogdir = os.environ["ER_LOG_DIR"]
+            # print ("Found ER_LOG_DIR: {}".format(envlogdir))
+            logdir = os.path.abspath(os.path.expanduser(envlogdir))
         if explicitLogDir:
             logdir = explicitLogDir
-        fh = logging.handlers.RotatingFileHandler(os.path.join(logdir, loggername + ".log"), maxBytes=10485760, backupCount=5)
+        logfile = os.path.join(logdir, loggername + ".log")
+        # print ("logfile: {}".format(logfile))
+        fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
@@ -291,3 +304,6 @@ if __name__ == '__main__':
     logger.warning("Bad")
     logger.error("To")
     logger.critical("Worst")
+
+    # printHandlerInfo(logger)
+    # printLoggerInfo()
