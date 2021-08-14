@@ -52,7 +52,7 @@ class Emailer(object):
                 logger.error("Message: %s" % (message))
                 return
             if self.server:
-                server.sendmail(sender_email, receiver_email, "Subject: " + subject + "\n\n" + message)
+                self.server.sendmail(self.sender_email, to, "Subject: " + subject + "\n\n" + message)
             else:
                 with smtplib.SMTP_SSL(self.host, self.port) as server:
                 # with smtplib.SMTP_SSL(self.host, self.port, context=ssl.create_default_context()) as server:
