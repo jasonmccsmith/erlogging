@@ -66,8 +66,8 @@ import configparser
 #
 #     for key in logging.Logger.manager.loggerDict:
 #         print(key)
-# 
-# 
+#
+#
 # Email handler setup can be made easier with a config file that you *don't* check in to git
 # erlogging.preSetupEmailFromConfig("erEmailSetup.config")
 #
@@ -82,6 +82,7 @@ DEBUG = logging.DEBUG
 
 emailSetupInfo = {}
 
+
 def preSetupEmail(mailhost, fromaddr, toaddrs, subject, credentials, secure):
     global emailSetupInfo
     emailSetupInfo["mailhost"] = mailhost
@@ -91,26 +92,28 @@ def preSetupEmail(mailhost, fromaddr, toaddrs, subject, credentials, secure):
     emailSetupInfo["credentials"] = credentials
     emailSetupInfo["secure"] = secure
 
+
 def preSetupEmailFromConfig(configfile):
     config = configparser.ConfigParser()
     if os.path.exists(configfile):
         config.read(configfile)
-        preSetupEmail(tuple(config.get("DEFAULT", "mailhost").split()), \
-                      config.get("DEFAULT", "fromaddr"), \
-                      config.get("DEFAULT", "toaddr").split(), \
-                      config.get("DEFAULT", "subject"), \
-                      tuple(config.get("DEFAULT", "credentials").split()), \
-                      tuple(config.get("DEFAULT", "secure").split()) \
-                     )
+        preSetupEmail(tuple(config.get("DEFAULT", "mailhost").split()),
+                      config.get("DEFAULT", "fromaddr"),
+                      config.get("DEFAULT", "toaddr").split(),
+                      config.get("DEFAULT", "subject"),
+                      tuple(config.get("DEFAULT", "credentials").split()),
+                      tuple(config.get("DEFAULT", "secure").split())
+                      )
     else:
-        print ("ERROR:  (erlogging) No such email config file: '{}'".format(configfile))
-    
+        print("ERROR:  (erlogging) No such email config file: '{}'".format(configfile))
+
 # Set up this info as per logging.SMTPHandler
 #   Example:
 #       emailHostPort = ("smtp.gmail.com", 587)
 #       emailCredentials = ("foo@gmail.com", "myvoiceismy")
-#       emailFromAddr = 
+#       emailFromAddr =
 #
+
 
 def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=None):
     """Set up a logger for a module that calls this function.  This is a bit different.  
@@ -118,9 +121,9 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
     we can do that by having the file send us a lambda of the call.  We do all the heavy 
     lifting here, walking through the call stack to extract an import chain that we use 
     as the loggername, using depth of (useful) stack to set up handlers only when needed, etc."""
-    
+
     global emailSetupInfo
-    
+
     # Controls for stepping through sys._getframe
     # Step is dependent on Python version (boo)
     # Pre 3.3, it is 0, then with 3.3 it gets weird.  Look up by version
@@ -137,7 +140,7 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
     __depthOffset = 2
 
     # print("First level logger is at __depthStep + __depthOffset = {}".format(__depthStep + __depthOffset))
-    
+
     depth = __depthOffset
     loggername = ""
     while True:
@@ -156,19 +159,19 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
         except ValueError:
             break
     # print ("{}: '{}' at depth {}".format(srcFile, loggername, depth))
-    
+
     # Get the bloody logger
     logger = logging.getLogger(loggername)
     # print("'{}'".format(loggername[:10]))
-    
+
     # If this is a top level module, set the formatters and handlers for it.
     # Children of this logger will inherit these behaviors
-    if   depth == __depthStep + __depthOffset or \
-        (depth == __depthStep * 2 + __depthOffset and loggername[:8] == '__init__'):
+    if depth == __depthStep + __depthOffset or \
+            (depth == __depthStep * 2 + __depthOffset and loggername[:8] == '__init__'):
         # Second clause is for when the top level is wrapped in a setuptools entry point
         # print ("----------- Setting up logger!")
         # Formatting and output styles
-        fmt='%(asctime)s - %(module)s %(funcName)s [%(lineno)4d] - %(levelname)s - %(message)s'
+        fmt = '%(asctime)s - %(module)s %(funcName)s [%(lineno)4d] - %(levelname)s - %(message)s'
         formatter = logging.Formatter(fmt)
 
         # File handler - DEBUG
@@ -180,12 +183,14 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
         if explicitLogDir:
             logdir = explicitLogDir
         logfile = os.path.join(logdir, loggername + ".log")
+        if logfile.startswith("__init__."):
+            logfile = logfile[9:]
         # print ("logfile: {}".format(logfile))
         fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5, encoding='utf-8')
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-        
+
         # Email handler - ERROR and CRITICAL only (includes .exception() calls)
         if "ER_EMAIL_CONFIG" in os.environ:
             preSetupEmailFromConfig(os.environ["ER_EMAIL_CONFIG"])
@@ -199,33 +204,36 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
                 logger.addHandler(emailHandler)
             except Exception as e:
                 print(e)
-    
+
         # Colored syntax stderr handler - DEBUG
-        styles={
-            'asctime': {'color': 'green'}, 'module': {'color': 'magenta'}, 
-            'levelname': {'color': 'white', 'bold': True}, 
+        styles = {
+            'asctime': {'color': 'green'}, 'module': {'color': 'magenta'},
+            'levelname': {'color': 'white', 'bold': True},
             'funcName': {'color': 'cyan'}, 'programname': {'color': 'blue'}
         }
         coloredlogs.install(level='DEBUG', fmt=fmt, field_styles=styles, logger=logger)
-    
+
         # Default level for logger
         logger.setLevel(logging.WARNING)
 
         # Default exception behavior - don't raise
         logging.raiseExceptions = True
-        
+
     return logger
 
 ###########################################
 ##
-##  Utility functions for debugging loggers
+# Utility functions for debugging loggers
 ##
 ##
+
+
 def printLoggerInfo(logger):
     print(logger)
     # print(dir(logger))
     for l in dir(logger):
         print(l, logger.__getattribute__(l))
+
 
 def printHandlerInfo(handler):
     print('-------------------------------------------------------\n', handler)
@@ -236,20 +244,22 @@ def printHandlerInfo(handler):
 
 ###########################################
 ##
-##  Abandonded code for other approaches for getting name of modules
+# Abandonded code for other approaches for getting name of modules
 ##
 ##
 def stack_depth():
     depth = 0
     while True:
         try:
-            print ("stack_depth:", sys._getframe(depth).f_globals['__file__'])
-            depth +=1
+            print("stack_depth:", sys._getframe(depth).f_globals['__file__'])
+            depth += 1
         except ValueError as e:
             break
     return depth
 
+
 __importedBy = None
+
 
 def imported_from(depth=0):
     # skip the frames of this function, and the caller
@@ -258,6 +268,7 @@ def imported_from(depth=0):
         f = f.f_back
     print(stack_depth())
     return sys._getframe(6).f_globals['__file__']
+
 
 def getModuleName():
     depth = 0
@@ -280,14 +291,16 @@ def getModuleName():
     print("def:", loggername, depth)
     return int(depth/6), loggername
 
+
 ###########################################
 ##
-##  Simple tester __main__
+# Simple tester __main__
 ##
 ##
 if __name__ == '__main__':
-    import argparse, sys
-    parser = argparse.ArgumentParser(description = 'OMG Google Sheets Demo')
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description='OMG Google Sheets Demo')
     # Debugging and testing
     parser.add_argument('--verbose', default=False, action='store_true')
     parser.add_argument('--debug', default=False, action='store_true')
@@ -298,7 +311,7 @@ if __name__ == '__main__':
         logger.setLevel(INFO)
     if args.debug:
         logger.setLevel(DEBUG)
-    
+
     logger.debug("Messages")
     logger.info("From")
     logger.warning("Bad")
