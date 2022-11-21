@@ -181,7 +181,7 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
             logdir = explicitLogDir
         logfile = os.path.join(logdir, loggername + ".log")
         # print ("logfile: {}".format(logfile))
-        fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5)
+        fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5, encoding='utf-8')
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
