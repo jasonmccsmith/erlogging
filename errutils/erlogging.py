@@ -183,8 +183,10 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
         if explicitLogDir:
             logdir = explicitLogDir
         logfile = os.path.join(logdir, loggername + ".log")
-        if logfile.startswith("__init__."):
-            logfile = logfile[9:]
+        if loggername[0:9] == "__init__.":
+            logfile = os.path.join(logdir, loggername[9:] + ".log")
+        else:
+            logfile = os.path.join(logdir, loggername + ".log")
         # print ("logfile: {}".format(logfile))
         fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5, encoding='utf-8')
         fh.setLevel(logging.DEBUG)
