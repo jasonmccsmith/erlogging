@@ -9,6 +9,9 @@ import logging
 import logging.handlers
 import coloredlogs
 import configparser
+import sys
+import datetime
+import inspect
 
 ####################################################
 # Original code, was copied to each file.  Errors abounded:
@@ -82,6 +85,9 @@ DEBUG = logging.DEBUG
 
 emailSetupInfo = {}
 
+def debugPrefix():
+    callingframe = inspect.currentframe().f_back
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " - erlogging " + callingframe.f_code.co_name + " [ " + str(callingframe.f_lineno) + "] - "
 
 def preSetupEmail(mailhost, fromaddr, toaddrs, subject, credentials, secure):
     global emailSetupInfo
@@ -105,7 +111,7 @@ def preSetupEmailFromConfig(configfile):
                       tuple(config.get("DEFAULT", "secure").split())
                       )
     else:
-        print("ERROR:  (erlogging) No such email config file: '{}'".format(configfile))
+        print(debugPrefix() + "ERROR:  (erlogging) No such email config file: '{}'".format(configfile))
 
 # Set up this info as per logging.SMTPHandler
 #   Example:
@@ -114,85 +120,183 @@ def preSetupEmailFromConfig(configfile):
 #       emailFromAddr =
 #
 
-
-def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=None):
+def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=None, debug=False):
     """Set up a logger for a module that calls this function.  This is a bit different.  
     We need the call to sys._getframe to happen in the file that we want info for, but 
     we can do that by having the file send us a lambda of the call.  We do all the heavy 
     lifting here, walking through the call stack to extract an import chain that we use 
     as the loggername, using depth of (useful) stack to set up handlers only when needed, etc."""
-
+    
     global emailSetupInfo
-
+    
     # Controls for stepping through sys._getframe
     # Step is dependent on Python version (boo)
     # Pre 3.3, it is 0, then with 3.3 it gets weird.  Look up by version
-    import sys
     version = sys.version_info
+    versionStr = "{}.{}.{}".format(version.major, version.minor, version.micro)
+    if debug:
+        print(debugPrefix() + "Python version {}".format(versionStr))
     if version.major < 3:
         __depthStep = 0
     else:
-        steps3 = [0, 0, 0, 9, 7, 6, 6, 6, 6, 6, 6]
-        __depthStep = steps3[version.minor]
-        # print (version.minor, steps3, steps3[version.minor])
+        # Each of python 3.0 through 3.12
+        # 3.0 -> 3.2
+        if version.minor < 3:
+            __depthStep = 0
+        # 3.3
+        if version.minor == 3:
+            __depthStep = 9
+        # 3.4
+        if version.minor == 4:
+            __depthStep = 7
+        # 3.5, 3.6
+        if version.minor > 4 and version.minor < 7:
+            __depthStep = 6
+        # 3.7.0 -> 3.7.8
+        if version.minor == 7 and version.micro < 9:
+            __depthStep = 6
+        # 3.7.9 -> ??
+        else:
+            __depthStep = 6
+        
+        if debug:
+            print(debugPrefix() + "Python version {}, __depthStep: {}".format(versionStr, __depthStep))
 
     # Offset is to roll back from this call site to the function/lambda defined in the module of interest
     __depthOffset = 2
 
-    # print("First level logger is at __depthStep + __depthOffset = {}".format(__depthStep + __depthOffset))
-
-    depth = __depthOffset
-    loggername = ""
-    while True:
-        try:
-            srcFile = nameGetter(depth).f_globals.get('__file__')
-            if srcFile == None:
-                # print("ERROR: NO SOURCE FILE??")
+    def printFrameStackPseudoModules():
+        depth = 0
+        name = ""
+        while True:
+            try:
+                name = os.path.splitext(os.path.basename(nameGetter(depth).f_globals.get('__file__')))[0] + "." + name
+                print(name)
+                depth += 1
+            except ValueError:
                 break
-            importScope = os.path.splitext(os.path.basename(srcFile))[0]
-            if depth == __depthOffset:
-                loggername = importScope
-            else:
-                loggername = importScope + "." + loggername
-            depth += __depthStep
-            # print ("{}: '{}' at depth {} using offset {} and step {}".format(srcFile, loggername, depth, __depthOffset, __depthStep))
-        except ValueError:
-            break
-    # print ("{}: '{}' at depth {}".format(srcFile, loggername, depth))
+
+    def printFrameStackFiles():
+        depth = 0
+        name = ""
+        while True:
+            try:
+                name = nameGetter(depth).f_globals.get('__file__') + "." + name
+                print(name)
+                depth += 1
+            except ValueError:
+                break
+
+    loggername = ""
+    depth = 0
+    # printFrameStackPseudoModules()
+    # printFrameStackFiles()
+
+    def name_eq_main():
+        # When executing directly (as in `$ python -m module` in the shell) to invoke the std "if __name__ == 'main':"
+        if debug:
+            print(debugPrefix() + "Checking if running as __main__")
+        result = (depth == __depthStep + __depthOffset)
+        if result and debug:
+            print(debugPrefix() + "Running as __main__")
+        return result
+
+    def being_run_inside_setuptools_wrapper():
+        # Check to see if we're being exceuted inside a setuptools wrapper
+        if debug:
+            print(debugPrefix() + "Checking if running setuptools wrapper")
+        result = False
+        if version.major < 3 or (version.major == 3 and version.minor < 7) or (version.major == 3 and version.minor == 7 and version.micro < 9):
+            # Up until python 3.7.8, '__init__' is the wrapper name.
+            if debug:
+                print(debugPrefix() + "\t... up to python 3.7.8")
+            # The depth cleanly maps to the following calculation.
+            result = (depth == __depthStep * 2 + __depthOffset) and loggername[:8] == '__init__'
+            if result and debug:
+                print(debugPrefix() + "Running in setuptools wrapper (pre-3.7.9)")
+        else:
+            # Starting in python 3.7.9, '_bootstrap' is the new wrapper name.
+            if debug:
+                print(debugPrefix() + "\t... in python 3.7.9 and later")
+            # The depth has no clear calculation at this point, so just go by name
+            result = loggername[:10] == '_bootstrap'
+            if result and debug:
+                print(debugPrefix() + "Running in setuptools wrapper (3.7.9 and after)")
+        return result
+
+    def getLoggername(__depthOffset, __depthStep):
+        depth = __depthOffset
+        loggername = ""
+        while True:
+            try:
+                # print (nameGetter(depth))
+                # Starting in Python 3.12, sys._getframemodulename(depth) can be used to get this info more directly.
+                srcFile = nameGetter(depth).f_globals.get('__file__')
+                if srcFile == None:
+                    print(debugPrefix() + "ERROR: NO SOURCE FILE??")
+                    break
+                importScope = os.path.splitext(os.path.basename(srcFile))[0]
+                if depth == __depthOffset:
+                    loggername = importScope
+                else:
+                    loggername = importScope + "." + loggername
+                depth += __depthStep
+                if debug:
+                    print(debugPrefix() + "{}: '{}' at depth {} using offset {} and step {}".format(srcFile,
+                          loggername, depth, __depthOffset, __depthStep))
+            except ValueError:
+                break
+
+        # loggername = ".".join([n for n in loggername.split('.') if '_bootstrap' not in n])
+        if debug: 
+            print(debugPrefix() + "loggername: '{}'".format(loggername))
+            print(debugPrefix() + "   at depth: {}".format(depth))
+
+        return loggername, depth
+    
+    def trySteps():
+    # When new versions of setuptools are released, use this to determine which step value works
+    # This is for development only.
+        for __depthStep in range(1, 9):
+            # Start at this offset into the frame stack
+            print ("---------------- step = {}".format(__depthStep))
+            loggername, depth = getLoggername(__depthOffset, __depthStep)
+            if not name_eq_main():
+                being_run_inside_setuptools_wrapper()
+        print("----------------")
+            
+    # trySteps()
+
+    loggername, depth = getLoggername(__depthOffset, __depthStep)
 
     # Get the bloody logger
     logger = logging.getLogger(loggername)
-    # print("'{}'".format(loggername[:10]))
 
     # If this is a top level module, set the formatters and handlers for it.
     # Children of this logger will inherit these behaviors
-    if depth == __depthStep + __depthOffset or \
-            (depth == __depthStep * 2 + __depthOffset and loggername[:8] == '__init__'):
-        # Second clause is for when the top level is wrapped in a setuptools entry point
-        # print ("----------- Setting up logger!")
+    if name_eq_main() or being_run_inside_setuptools_wrapper():
+        if debug: print (debugPrefix() + "----------- Setting up logger!")
         # Formatting and output styles
-        fmt = '%(asctime)s - %(module)s %(funcName)s [%(lineno)4d] - %(levelname)s - %(message)s'
+        fmt='%(asctime)s - %(module)s %(funcName)s [%(lineno)4d] - %(levelname)s - %(message)s'
         formatter = logging.Formatter(fmt)
 
         # File handler - DEBUG
         logdir = os.getcwd()
         if "ER_LOG_DIR" in os.environ:
             envlogdir = os.environ["ER_LOG_DIR"]
-            # print ("Found ER_LOG_DIR: {}".format(envlogdir))
+            if debug:
+                print(debugPrefix() + "Found ER_LOG_DIR: {}".format(envlogdir))
             logdir = os.path.abspath(os.path.expanduser(envlogdir))
         if explicitLogDir:
             logdir = explicitLogDir
         logfile = os.path.join(logdir, loggername + ".log")
-        if loggername[0:9] == "__init__.":
-            logfile = os.path.join(logdir, loggername[9:] + ".log")
-        else:
-            logfile = os.path.join(logdir, loggername + ".log")
-        # print ("logfile: {}".format(logfile))
-        fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5, encoding='utf-8')
+        if debug:
+            print(debugPrefix() + "logfile: {}".format(logfile))
+        fh = logging.handlers.RotatingFileHandler(logfile, maxBytes=10485760, backupCount=5)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-
+        
         # Email handler - ERROR and CRITICAL only (includes .exception() calls)
         if "ER_EMAIL_CONFIG" in os.environ:
             preSetupEmailFromConfig(os.environ["ER_EMAIL_CONFIG"])
@@ -206,28 +310,32 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
                 logger.addHandler(emailHandler)
             except Exception as e:
                 print(e)
-
+    
         # Colored syntax stderr handler - DEBUG
-        styles = {
-            'asctime': {'color': 'green'}, 'module': {'color': 'magenta'},
-            'levelname': {'color': 'white', 'bold': True},
+        styles={
+            'asctime': {'color': 'green'}, 'module': {'color': 'magenta'}, 
+            'levelname': {'color': 'white', 'bold': True}, 
             'funcName': {'color': 'cyan'}, 'programname': {'color': 'blue'}
         }
         coloredlogs.install(level='DEBUG', fmt=fmt, field_styles=styles, logger=logger)
-
+    
         # Default level for logger
         logger.setLevel(logging.WARNING)
 
         # Default exception behavior - don't raise
         logging.raiseExceptions = True
-
+    else:
+        if debug: print ("Not top level logger, will inherit setup from parent logger(s)")
+        
     return logger
+
 
 ###########################################
 ##
 # Utility functions for debugging loggers
 ##
 ##
+
 
 
 def printLoggerInfo(logger):
@@ -302,13 +410,13 @@ def getModuleName():
 if __name__ == '__main__':
     import argparse
     import sys
-    parser = argparse.ArgumentParser(description='OMG Google Sheets Demo')
+    parser = argparse.ArgumentParser(description='ER Logging Demo')
     # Debugging and testing
     parser.add_argument('--verbose', default=False, action='store_true')
     parser.add_argument('--debug', default=False, action='store_true')
     args = parser.parse_args()
 
-    logger = setup(lambda depth: sys._getframe(depth))
+    logger = setup(lambda depth: sys._getframe(depth), debug=True)
     if args.verbose:
         logger.setLevel(INFO)
     if args.debug:
@@ -321,4 +429,4 @@ if __name__ == '__main__':
     logger.critical("Worst")
 
     # printHandlerInfo(logger)
-    # printLoggerInfo()
+    # printLoggerInfo(logger)
