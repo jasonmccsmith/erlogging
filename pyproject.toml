@@ -1,0 +1,24 @@
+[project]
+name = "errutils"
+version = "0.9"
+description = "Elemental Reasoning reporting utilities"
+license = {text = "BSD-3"}
+authors = [{name = "Elemental Reasoning", email="jason@elementalreasoning.com"}]
+keywords = [
+]
+dependencies = [
+    "coloredlogs",
+]
+
+
+[project.urls]
+Documentation = "http://github.com/jasonmccsmith/errutils"
+Source = "http://github.com/jasonmccsmith/errutils"
+
+
+[project.optional-dependencies]
+
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
