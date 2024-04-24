@@ -156,8 +156,17 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
         if version.minor == 7 and version.micro < 9:
             __depthStep = 6
         # 3.7.9 -> ??
+        # These use the new, much more direct approach.
+        if version.minor == 7 and version.micro > 8:
+            __depthStep = 0
+        if version.minor == 8:
+            __depthStep = 0
+        if version.minor == 9:
+            __depthStep = 0
+        if version.minor == 10:
+            __depthStep = 0
         else:
-            __depthStep = 6
+            __depthStep = 0
         
         if debug:
             print(debugPrefix() + "Python version {}, __depthStep: {}".format(versionStr, __depthStep))
@@ -165,13 +174,27 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
     # Offset is to roll back from this call site to the function/lambda defined in the module of interest
     __depthOffset = 2
 
+    def getFrameStackPseudoModules():
+        depth = 0
+        modules = []
+        while True:
+            try:
+                modules.insert(0, os.path.splitext(os.path.basename(nameGetter(depth).f_globals.get('__file__')))[0])
+                # print(debugPrefix() + name)
+                depth += 1
+            except ValueError:
+                break
+        modules = [n for n in modules if '_bootstrap' not in n]
+
+        return modules
+
     def printFrameStackPseudoModules():
         depth = 0
         name = ""
         while True:
             try:
                 name = os.path.splitext(os.path.basename(nameGetter(depth).f_globals.get('__file__')))[0] + "." + name
-                print(name)
+                print(debugPrefix() + name)
                 depth += 1
             except ValueError:
                 break
@@ -182,15 +205,16 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
         while True:
             try:
                 name = nameGetter(depth).f_globals.get('__file__') + "." + name
-                print(name)
+                print(debugPrefix() + name)
                 depth += 1
             except ValueError:
                 break
 
     loggername = ""
     depth = 0
-    # printFrameStackPseudoModules()
-    # printFrameStackFiles()
+    if debug:
+        printFrameStackPseudoModules()
+        # printFrameStackFiles()
 
     def name_eq_main():
         # When executing directly (as in `$ python -m module` in the shell) to invoke the std "if __name__ == 'main':"
@@ -243,11 +267,10 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
                 depth += __depthStep
                 if debug:
                     print(debugPrefix() + "{}: '{}' at depth {} using offset {} and step {}".format(srcFile,
-                          loggername, depth, __depthOffset, __depthStep))
+                        loggername, depth, __depthOffset, __depthStep))
             except ValueError:
                 break
 
-        # loggername = ".".join([n for n in loggername.split('.') if '_bootstrap' not in n])
         if debug: 
             print(debugPrefix() + "loggername: '{}'".format(loggername))
             print(debugPrefix() + "   at depth: {}".format(depth))
@@ -265,17 +288,12 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
                 being_run_inside_setuptools_wrapper()
         print("----------------")
             
-    # trySteps()
 
-    loggername, depth = getLoggername(__depthOffset, __depthStep)
+    def setTopLevelLogger(logger, loggername):
+        # If this is a top level module, set the formatters and handlers for it.
+        # Children of this logger will inherit these behaviors
 
-    # Get the bloody logger
-    logger = logging.getLogger(loggername)
-
-    # If this is a top level module, set the formatters and handlers for it.
-    # Children of this logger will inherit these behaviors
-    if name_eq_main() or being_run_inside_setuptools_wrapper():
-        if debug: print (debugPrefix() + "----------- Setting up logger!")
+        if debug: print (debugPrefix() + "----------- Setting up top level logger!")
         # Formatting and output styles
         fmt='%(asctime)s - %(module)s %(funcName)s [%(lineno)4d] - %(levelname)s - %(message)s'
         formatter = logging.Formatter(fmt)
@@ -324,9 +342,34 @@ def setup(nameGetter, explicitLogDir=None, logConfigFile=None, emailConfigFile=N
 
         # Default exception behavior - don't raise
         logging.raiseExceptions = True
-    else:
-        if debug: print ("Not top level logger, will inherit setup from parent logger(s)")
         
+        # if debug: trySteps()
+
+    if __depthStep:
+        # Old approach
+        loggername, depth = getLoggername(__depthOffset, __depthStep)
+        logger = logging.getLogger(loggername)
+
+        if name_eq_main() or being_run_inside_setuptools_wrapper():
+            setTopLevelLogger(logger, loggername)
+        else:
+            if debug: print ("Not top level logger, will inherit setup from parent logger(s)")
+
+    else:
+        # New approach
+        modules = getFrameStackPseudoModules()
+        modules = [n for n in modules if 'erlogging' not in n]
+        modules = modules[:-1]
+        if len(modules) == 0:
+            modules.append('erlogging')
+        if debug: print (modules)
+        loggername = '.'.join(modules)
+        logger = logging.getLogger(loggername)
+        if len(modules) == 1:
+            setTopLevelLogger(logger, loggername)
+        else:
+            if debug: print ("Not top level logger, will inherit setup from parent logger(s)")
+
     return logger
 
 
